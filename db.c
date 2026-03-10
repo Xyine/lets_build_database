@@ -5,6 +5,11 @@
 # include <stdio.h>
 
 
+#define USERNAME_SIZE 32
+#define EMAIL_SIZE 255
+#define INPUT_SIZE 100
+
+
 typedef enum MetaCommandResult {
     META_COMMAND_SUCCESS,
     META_COMMAND_UNRECOGNIZED_COMMAND
@@ -13,25 +18,24 @@ typedef enum MetaCommandResult {
 typedef enum PrepareResult {
     PREPARE_SUCCESS,
     PREPARE_UNRECOGNIZED_STATEMENT,
-    PREPARE_SYNTAXE_ERROR
+    PREPARE_SYNTAX_ERROR
 } PrepareResult;
 
 typedef enum StatementType {
     STATEMENT_INSERT,
-    STATEMENT_SELECT,
-    STATEMENT_UNRECOGNIZED
+    STATEMENT_SELECT
 } StatementType;
 
-typedef enum Execute_result {
+typedef enum ExecuteResult {
     EXECUTE_SUCCESS,
     EXECUTE_TABLE_FULL,
     EXECUTE_TABLE_EMPTY
-} Execute_result;
+} ExecuteResult;
 
 typedef struct Row {
     uint32_t id;
-    char username[32];
-    char email[255];
+    char username[USERNAME_SIZE];
+    char email[EMAIL_SIZE];
 } Row;
 
 typedef struct Statement {
@@ -54,12 +58,16 @@ MetaCommandResult do_meta_command(char *input, Table *table);
 
 PrepareResult prepare_statement(char *input, Statement *statement);
 
-Execute_result execute_statement(Statement *statement, Table *table);
+ExecuteResult execute_statement(Statement *statement, Table *table);
+
+ExecuteResult insert_row(Statement *statement, Table *table);
+
+ExecuteResult select_row(Table *table);
 
 
 int main(void){
     Table *table = new_table();
-    char input[100];
+    char input[INPUT_SIZE];
     while(1){
         printf("db >");
         fflush(stdout);
@@ -83,8 +91,8 @@ int main(void){
             case PREPARE_UNRECOGNIZED_STATEMENT:
                 printf("Unrecognized keyword at the start of statement '%s'\n", input);
                 continue;
-            case PREPARE_SYNTAXE_ERROR:
-                printf("Syntax error in the insert statement, insert take 3 arguments int id, str username, str email '%s'\n", input);
+            case PREPARE_SYNTAX_ERROR:
+                printf("Syntax error. Usage: insert <id> <username> <email>\n");
                 continue;
         }
 
@@ -107,12 +115,12 @@ int main(void){
 void read_input(char *input){
     if (fgets(input, 100, stdin) == NULL){
         printf("Error reading input\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     
-    int input_length = strlen(input);
+    size_t input_length = strlen(input);
     
-    if (input[input_length -1] == '\n'){
+    if (input_length > 0 && input[input_length - 1] == '\n') {
         input[input_length - 1] = '\0';
     }
 }
@@ -120,22 +128,22 @@ void read_input(char *input){
 MetaCommandResult do_meta_command(char *input, Table *table){
     if (strcmp(input, ".exit") == 0){
         free_table(table);
-        exit(0);
+        exit(EXIT_SUCCESS);
     }  
     return META_COMMAND_UNRECOGNIZED_COMMAND;
 }
 
 PrepareResult prepare_statement(char *input, Statement *statement){
-    if (strncmp(input, "select", 6) == 0){
+    if (strcmp(input, "select") == 0){
         statement->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
     }
     if (strncmp(input, "insert", 6) == 0){
         statement->type = STATEMENT_INSERT;
-        int args_assigned = sscanf(input, "insert %d %31s %254s", &(statement->row_to_insert.id),
+        int args_assigned = sscanf(input, "insert %u %31s %254s", &(statement->row_to_insert.id),
         statement->row_to_insert.username, statement->row_to_insert.email);
         if (args_assigned < 3){
-            return PREPARE_SYNTAXE_ERROR;
+            return PREPARE_SYNTAX_ERROR;
         }
         return PREPARE_SUCCESS;
     }
@@ -144,6 +152,10 @@ PrepareResult prepare_statement(char *input, Statement *statement){
 
 Table* new_table(){
     Table *table = malloc(sizeof(Table));
+    if (table == NULL) {
+        fprintf(stderr, "Error: could not allocate memory for new table.\n");
+        exit(EXIT_FAILURE);
+    }
     table->row = NULL;
     table->has_row = false;
     return table;
@@ -157,36 +169,43 @@ void free_table(Table *table){
     free(table);
 }
 
-Execute_result insert_row(Statement *statement, Table *table){
+ExecuteResult insert_row(Statement *statement, Table *table){
     if (table->has_row){
         return EXECUTE_TABLE_FULL;
     }
     Row *memory_block = malloc(sizeof(Row));
-
-    Row row = statement->row_to_insert;
-    *memory_block = row;
+    if (memory_block == NULL) {
+        fprintf(stderr, "Error: could not allocate memory for row.\n");
+        exit(EXIT_FAILURE);
+    }
+    *memory_block = statement->row_to_insert;
 
     table->row = memory_block;
     table->has_row = true;
     return EXECUTE_SUCCESS;
 }
 
-Execute_result select_row(Table *table){
+ExecuteResult select_row(Table *table){
     if (!table->has_row || table->row == NULL){
         return EXECUTE_TABLE_EMPTY;
     }
 
     Row *row = table->row;
 
-    printf("('%d', '%s', '%s')\n", row->id, row->username, row->email);
+    printf("('%u', '%s', '%s')\n", row->id, row->username, row->email);
     return EXECUTE_SUCCESS;
 }
 
-Execute_result execute_statement(Statement *statement, Table *table){
+ExecuteResult execute_statement(Statement *statement, Table *table){
     switch(statement->type){
         case STATEMENT_INSERT:
             return insert_row(statement, table);
         case STATEMENT_SELECT:
             return select_row(table);
     }
+    return EXECUTE_SUCCESS;
 }
+
+
+// TODO 
+// on a une table avec une collone voir ce qui est le plus simple entre 1 table 1 page et 1 collone ou 1 table et plusieurs colonne
