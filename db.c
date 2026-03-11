@@ -8,6 +8,7 @@
 #define USERNAME_SIZE 32
 #define EMAIL_SIZE 255
 #define INPUT_SIZE 100
+#define TABLE_MAX_ROWS 100
 
 
 typedef enum MetaCommandResult {
@@ -44,8 +45,8 @@ typedef struct Statement {
 } Statement;
 
 typedef struct Table {
-    bool has_row;
-    Row *row;
+    uint32_t num_rows; // // counter for the number of rows used because we can't get it easily otherwise
+    Row *row[TABLE_MAX_ROWS];
 } Table;
 
 Table* new_table();
@@ -138,7 +139,7 @@ PrepareResult prepare_statement(char *input, Statement *statement){
         statement->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
     }
-    if (strncmp(input, "insert", 6) == 0){
+    if (strncmp(input, "insert ", 7) == 0){
         statement->type = STATEMENT_INSERT;
         int args_assigned = sscanf(input, "insert %u %31s %254s", &(statement->row_to_insert.id),
         statement->row_to_insert.username, statement->row_to_insert.email);
@@ -150,14 +151,16 @@ PrepareResult prepare_statement(char *input, Statement *statement){
     return PREPARE_UNRECOGNIZED_STATEMENT;
 }
 
-Table* new_table(){
+Table* new_table(void){
     Table *table = malloc(sizeof(Table));
     if (table == NULL) {
         fprintf(stderr, "Error: could not allocate memory for new table.\n");
         exit(EXIT_FAILURE);
     }
-    table->row = NULL;
-    table->has_row = false;
+    for (int i = 0; i < TABLE_MAX_ROWS; i++){
+        table->row[i] = NULL;
+    }
+    table->num_rows = 0;
     return table;
 }
 
@@ -165,12 +168,14 @@ void free_table(Table *table){
     if (table == NULL){
         return;
     }
-    free(table->row);
+    for (int i = 0; i < table->num_rows; i++){
+        free(table->row[i]);
+    }
     free(table);
 }
 
 ExecuteResult insert_row(Statement *statement, Table *table){
-    if (table->has_row){
+    if (table->num_rows >= TABLE_MAX_ROWS){
         return EXECUTE_TABLE_FULL;
     }
     Row *memory_block = malloc(sizeof(Row));
@@ -180,19 +185,19 @@ ExecuteResult insert_row(Statement *statement, Table *table){
     }
     *memory_block = statement->row_to_insert;
 
-    table->row = memory_block;
-    table->has_row = true;
+    table->row[table->num_rows] = memory_block;
+    table->num_rows ++;
     return EXECUTE_SUCCESS;
 }
 
 ExecuteResult select_row(Table *table){
-    if (!table->has_row || table->row == NULL){
+    if (table->num_rows == 0){
         return EXECUTE_TABLE_EMPTY;
     }
-
-    Row *row = table->row;
-
-    printf("('%u', '%s', '%s')\n", row->id, row->username, row->email);
+    for (int i = 0; i < table->num_rows; i++){
+        Row *row = table->row[i];
+        printf("('%u', '%s', '%s')\n", row->id, row->username, row->email);
+    }
     return EXECUTE_SUCCESS;
 }
 
