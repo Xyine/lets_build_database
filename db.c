@@ -9,6 +9,8 @@
 #define EMAIL_SIZE 255
 #define INPUT_SIZE 100
 #define TABLE_MAX_ROWS 100
+#define PAGE_SIZE 4096
+#define ROW_SIZE sizeof(Row)
 
 
 typedef enum MetaCommandResult {
@@ -46,8 +48,9 @@ typedef struct Statement {
 
 typedef struct Table {
     uint32_t num_rows; // // counter for the number of rows used because we can't get it easily otherwise
-    Row *row[TABLE_MAX_ROWS];
+    Row *page;
 } Table;
+
 
 Table* new_table();
 
@@ -157,8 +160,11 @@ Table* new_table(void){
         fprintf(stderr, "Error: could not allocate memory for new table.\n");
         exit(EXIT_FAILURE);
     }
-    for (int i = 0; i < TABLE_MAX_ROWS; i++){
-        table->row[i] = NULL;
+    table->page = malloc(PAGE_SIZE);
+    if (table->page == NULL) {
+        fprintf(stderr, "Error: could not allocate memory for page.\n");
+        free(table);
+        exit(EXIT_FAILURE);
     }
     table->num_rows = 0;
     return table;
@@ -168,9 +174,7 @@ void free_table(Table *table){
     if (table == NULL){
         return;
     }
-    for (int i = 0; i < table->num_rows; i++){
-        free(table->row[i]);
-    }
+    free(table->page);
     free(table);
 }
 
@@ -178,15 +182,8 @@ ExecuteResult insert_row(Statement *statement, Table *table){
     if (table->num_rows >= TABLE_MAX_ROWS){
         return EXECUTE_TABLE_FULL;
     }
-    Row *memory_block = malloc(sizeof(Row));
-    if (memory_block == NULL) {
-        fprintf(stderr, "Error: could not allocate memory for row.\n");
-        exit(EXIT_FAILURE);
-    }
-    *memory_block = statement->row_to_insert;
-
-    table->row[table->num_rows] = memory_block;
-    table->num_rows ++;
+    table->page[table->num_rows] = statement->row_to_insert;
+    table->num_rows ++; 
     return EXECUTE_SUCCESS;
 }
 
@@ -195,7 +192,7 @@ ExecuteResult select_row(Table *table){
         return EXECUTE_TABLE_EMPTY;
     }
     for (int i = 0; i < table->num_rows; i++){
-        Row *row = table->row[i];
+        Row *row = &table->page[i];
         printf("('%u', '%s', '%s')\n", row->id, row->username, row->email);
     }
     return EXECUTE_SUCCESS;
@@ -210,7 +207,3 @@ ExecuteResult execute_statement(Statement *statement, Table *table){
     }
     return EXECUTE_SUCCESS;
 }
-
-
-// TODO 
-// on a une table avec une collone voir ce qui est le plus simple entre 1 table 1 page et 1 collone ou 1 table et plusieurs colonne
