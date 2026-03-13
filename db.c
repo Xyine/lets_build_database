@@ -8,9 +8,10 @@
 #define USERNAME_SIZE 32
 #define EMAIL_SIZE 255
 #define INPUT_SIZE 100
-#define TABLE_MAX_ROWS 100
+#define ROWS_PER_PAGE (PAGE_SIZE / ROW_SIZE)
 #define PAGE_SIZE 4096
 #define ROW_SIZE sizeof(Row)
+#define TABLE_MAX_PAGES 100
 
 
 typedef enum MetaCommandResult {
@@ -32,7 +33,8 @@ typedef enum StatementType {
 typedef enum ExecuteResult {
     EXECUTE_SUCCESS,
     EXECUTE_TABLE_FULL,
-    EXECUTE_TABLE_EMPTY
+    EXECUTE_TABLE_EMPTY,
+    EXECUTE_FAILURE_UNKNOWN
 } ExecuteResult;
 
 typedef struct Row {
@@ -47,8 +49,8 @@ typedef struct Statement {
 } Statement;
 
 typedef struct Table {
-    uint32_t num_rows; // // counter for the number of rows used because we can't get it easily otherwise
-    Row *page;
+    uint32_t num_rows; // counter for the number of rows used because we can't get it easily otherwise
+    Row *pages[TABLE_MAX_PAGES];
 } Table;
 
 
@@ -110,6 +112,9 @@ int main(void){
             case EXECUTE_TABLE_EMPTY:
                 printf("Table is empty.\n");
                 break;
+            case EXECUTE_FAILURE_UNKNOWN:
+                printf("Error: unknown statement type.\n");
+                break;
         }
     }
 
@@ -160,11 +165,8 @@ Table* new_table(void){
         fprintf(stderr, "Error: could not allocate memory for new table.\n");
         exit(EXIT_FAILURE);
     }
-    table->page = malloc(PAGE_SIZE);
-    if (table->page == NULL) {
-        fprintf(stderr, "Error: could not allocate memory for page.\n");
-        free(table);
-        exit(EXIT_FAILURE);
+    for (int i = 0; i < TABLE_MAX_PAGES; i++){
+        table->pages[i] = NULL;
     }
     table->num_rows = 0;
     return table;
@@ -174,26 +176,39 @@ void free_table(Table *table){
     if (table == NULL){
         return;
     }
-    free(table->page);
+    for (int i = 0; i < TABLE_MAX_PAGES; i++){
+        free(table->pages[i]);
+    }
     free(table);
 }
 
 ExecuteResult insert_row(Statement *statement, Table *table){
-    if (table->num_rows >= TABLE_MAX_ROWS){
+    if (table->num_rows >= ROWS_PER_PAGE * TABLE_MAX_PAGES){
         return EXECUTE_TABLE_FULL;
     }
-    table->page[table->num_rows] = statement->row_to_insert;
+    int page_num = table->num_rows / ROWS_PER_PAGE;
+    if (table->pages[page_num] == NULL) {
+        table->pages[page_num] = malloc(PAGE_SIZE);
+        if (table->pages[page_num] == NULL) {
+            fprintf(stderr, "Error: could not allocate memory for page.\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+    int row_offset = table->num_rows % ROWS_PER_PAGE;
+    table->pages[page_num][row_offset] = statement->row_to_insert;
     table->num_rows ++; 
     return EXECUTE_SUCCESS;
-}
+} 
 
 ExecuteResult select_row(Table *table){
     if (table->num_rows == 0){
         return EXECUTE_TABLE_EMPTY;
     }
-    for (int i = 0; i < table->num_rows; i++){
-        Row *row = &table->page[i];
-        printf("('%u', '%s', '%s')\n", row->id, row->username, row->email);
+    for (uint32_t i = 0; i < table->num_rows; i++){
+        int page_num = i / ROWS_PER_PAGE;
+        int row_offset = i % ROWS_PER_PAGE;
+        Row *row = &table->pages[page_num][row_offset];
+        printf("(%u, %s, %s)\n", row->id, row->username, row->email);
     }
     return EXECUTE_SUCCESS;
 }
@@ -204,6 +219,7 @@ ExecuteResult execute_statement(Statement *statement, Table *table){
             return insert_row(statement, table);
         case STATEMENT_SELECT:
             return select_row(table);
+        default:
+            return EXECUTE_FAILURE_UNKNOWN;
     }
-    return EXECUTE_SUCCESS;
 }
