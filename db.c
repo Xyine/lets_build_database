@@ -7,12 +7,13 @@
 
 #define USERNAME_SIZE 32
 #define EMAIL_SIZE 255
-#define INPUT_SIZE 100
+#define INPUT_SIZE 300
 #define ROWS_PER_PAGE (PAGE_SIZE / ROW_SIZE)
 #define PAGE_SIZE 4096
 #define ROW_SIZE sizeof(Row)
 #define TABLE_MAX_PAGES 100
-
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
 
 typedef enum MetaCommandResult {
     META_COMMAND_SUCCESS,
@@ -22,7 +23,8 @@ typedef enum MetaCommandResult {
 typedef enum PrepareResult {
     PREPARE_SUCCESS,
     PREPARE_UNRECOGNIZED_STATEMENT,
-    PREPARE_SYNTAX_ERROR
+    PREPARE_SYNTAX_ERROR,
+    PREPARE_STRING_TOO_LONG,
 } PrepareResult;
 
 typedef enum StatementType {
@@ -39,8 +41,8 @@ typedef enum ExecuteResult {
 
 typedef struct Row {
     uint32_t id;
-    char username[USERNAME_SIZE];
-    char email[EMAIL_SIZE];
+    char username[USERNAME_SIZE + 1];
+    char email[EMAIL_SIZE + 1];
 } Row;
 
 typedef struct Statement {
@@ -122,7 +124,7 @@ int main(void){
 }
 
 void read_input(char *input){
-    if (fgets(input, 100, stdin) == NULL){
+    if (fgets(input, INPUT_SIZE, stdin) == NULL){
         printf("Error reading input\n");
         exit(EXIT_FAILURE);
     }
@@ -142,19 +144,25 @@ MetaCommandResult do_meta_command(char *input, Table *table){
     return META_COMMAND_UNRECOGNIZED_COMMAND;
 }
 
+PrepareResult prepare_insert(char *input, Statement *statement){
+    statement->type = STATEMENT_INSERT;
+
+    int args_assigned = sscanf(input, "insert %u %" STR(USERNAME_SIZE) "s %" STR(EMAIL_SIZE) "s", &(statement->row_to_insert.id),
+    statement->row_to_insert.username, statement->row_to_insert.email);
+    if (args_assigned < 3){
+        return PREPARE_SYNTAX_ERROR;
+    }
+
+    return PREPARE_SUCCESS;
+}
+
 PrepareResult prepare_statement(char *input, Statement *statement){
     if (strcmp(input, "select") == 0){
         statement->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
     }
     if (strncmp(input, "insert ", 7) == 0){
-        statement->type = STATEMENT_INSERT;
-        int args_assigned = sscanf(input, "insert %u %31s %254s", &(statement->row_to_insert.id),
-        statement->row_to_insert.username, statement->row_to_insert.email);
-        if (args_assigned < 3){
-            return PREPARE_SYNTAX_ERROR;
-        }
-        return PREPARE_SUCCESS;
+        return prepare_insert(input, statement);
     }
     return PREPARE_UNRECOGNIZED_STATEMENT;
 }
