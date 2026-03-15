@@ -65,8 +65,53 @@ select
     assert "Executed." in result
     assert expected_row in result
 
+def test_input_too_long():
+    long_input = "a" * 400
+
+    script = f"""{long_input}
+.exit
+"""
+
+    result = run_script(script)
+
+    assert "Input too long." in result
+
+def test_negative_id():
+    script = """insert -1 user person@example.com
+.exit
+"""
+
+    result = run_script(script)
+
+    assert "ID must be positive." in result
+
+def test_username_too_long():
+    long_username = "a" * 33
+
+    script = f"""insert 1 {long_username} person@example.com
+.exit
+"""
+
+    result = run_script(script)
+    assert "String is too long." in result
+
+def test_email_too_long():
+    long_email = "a" * 256
+
+    script = f"""insert 1 user {long_email}
+.exit
+"""
+
+    result = run_script(script)
+
+    assert "String is too long." in result
+
 if __name__ == "__main__":
     test_insert_and_select()
     test_table_full()
     test_max_length_strings()
+    test_input_too_long()
+    test_negative_id()
+    test_username_too_long()
+    test_email_too_long()
     print("All tests passed") 

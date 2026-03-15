@@ -15,6 +15,12 @@
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
 
+
+typedef enum ReadResult {
+    READ_SUCCESS,
+    READ_TOO_LONG
+} ReadResult;
+
 typedef enum MetaCommandResult {
     META_COMMAND_SUCCESS,
     META_COMMAND_UNRECOGNIZED_COMMAND
@@ -25,6 +31,7 @@ typedef enum PrepareResult {
     PREPARE_UNRECOGNIZED_STATEMENT,
     PREPARE_SYNTAX_ERROR,
     PREPARE_STRING_TOO_LONG,
+    PREPARE_NEGATIVE_ID
 } PrepareResult;
 
 typedef enum StatementType {
@@ -60,9 +67,11 @@ Table* new_table();
 
 void free_table(Table *table);
 
-void read_input(char *input);
+ReadResult read_input(char *input);
 
 MetaCommandResult do_meta_command(char *input, Table *table);
+
+PrepareResult prepare_insert(char *input, Statement *statement);
 
 PrepareResult prepare_statement(char *input, Statement *statement);
 
@@ -80,7 +89,13 @@ int main(void){
         printf("db >");
         fflush(stdout);
 
-        read_input(input);
+        switch (read_input(input)) {
+            case READ_SUCCESS:
+                break;
+            case READ_TOO_LONG:
+                printf("Input too long.\n");
+                continue;
+        }
 
         if (input[0] == '.'){
             switch (do_meta_command(input, table)) {
@@ -96,6 +111,12 @@ int main(void){
         switch (prepare_statement(input, &statement)) {
             case PREPARE_SUCCESS:
                 break;
+            case PREPARE_STRING_TOO_LONG:
+                printf("String is too long.\n");
+                continue;
+            case PREPARE_NEGATIVE_ID:
+                printf("ID must be positive.\n");
+                continue;
             case PREPARE_UNRECOGNIZED_STATEMENT:
                 printf("Unrecognized keyword at the start of statement '%s'\n", input);
                 continue;
@@ -123,17 +144,25 @@ int main(void){
     return 0;
 }
 
-void read_input(char *input){
+ReadResult read_input(char *input){
     if (fgets(input, INPUT_SIZE, stdin) == NULL){
         printf("Error reading input\n");
         exit(EXIT_FAILURE);
     }
-    
+
     size_t input_length = strlen(input);
-    
+
+    if (input[input_length - 1] != '\n'){
+        int c;
+        while ((c = getchar()) != '\n' && c != EOF); // vider stdin
+
+        return READ_TOO_LONG;
+    }
+
     if (input_length > 0 && input[input_length - 1] == '\n') {
         input[input_length - 1] = '\0';
     }
+    return READ_SUCCESS;
 }
 
 MetaCommandResult do_meta_command(char *input, Table *table){
@@ -146,12 +175,32 @@ MetaCommandResult do_meta_command(char *input, Table *table){
 
 PrepareResult prepare_insert(char *input, Statement *statement){
     statement->type = STATEMENT_INSERT;
+    char buffer[INPUT_SIZE];
+    strcpy(buffer, input);
 
-    int args_assigned = sscanf(input, "insert %u %" STR(USERNAME_SIZE) "s %" STR(EMAIL_SIZE) "s", &(statement->row_to_insert.id),
-    statement->row_to_insert.username, statement->row_to_insert.email);
-    if (args_assigned < 3){
+    char *keyword = strtok(buffer, " ");
+    char *id_str = strtok(NULL, " ");
+    char *username = strtok(NULL, " ");
+    char *email = strtok(NULL, " ");
+
+    if (id_str == NULL || username == NULL || email == NULL){
         return PREPARE_SYNTAX_ERROR;
     }
+    
+    int id = atoi(id_str);
+    if (id < 0){
+        return PREPARE_NEGATIVE_ID;
+    }
+    if (strlen(username) > USERNAME_SIZE){
+        return PREPARE_STRING_TOO_LONG;
+    }
+    if (strlen(email) > EMAIL_SIZE){
+        return PREPARE_STRING_TOO_LONG;
+    }
+
+    statement->row_to_insert.id = id;
+    strcpy(statement->row_to_insert.username, username);
+    strcpy(statement->row_to_insert.email, email);
 
     return PREPARE_SUCCESS;
 }
