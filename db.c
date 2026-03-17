@@ -62,7 +62,7 @@ typedef struct Statement {
 } Statement;
 
 typedef struct Pager {
-    int file_descriptor; // pourquoi int ?
+    int file_descriptor;
     uint32_t file_length;
     Row *pages[TABLE_MAX_PAGES];
 } Pager;
@@ -72,6 +72,11 @@ typedef struct Table {
     Pager  *pager;
 } Table;
 
+typedef struct Cursor {
+    Table *table;
+    uint32_t row_num;
+    bool end_of_table; // Indicates a position one past the last element
+} Cursor;
 
 Table* db_open(const char *filename);
 
@@ -97,6 +102,13 @@ ExecuteResult insert_row(Statement *statement, Table *table);
 
 ExecuteResult select_row(Table *table);
 
+Cursor* table_start(Table *table) ;
+
+Cursor* table_end(Table *table);
+
+Row* cursor_value(Cursor* cursor);
+
+void cursor_advance(Cursor *cursor);
 
 int main(int argc, char* argv[]){
     if (argc < 2) {
@@ -359,7 +371,7 @@ Row* get_page(Pager *pager, uint32_t page_num) {
             num_pages += 1;
         }
 
-        if (page_num <= num_pages) {
+        if (page_num < num_pages) {
             lseek(pager->file_descriptor, page_num * PAGE_SIZE, SEEK_SET);
             ssize_t bytes_read = read(pager->file_descriptor, page, PAGE_SIZE);
             if (bytes_read == -1) {
@@ -378,12 +390,12 @@ ExecuteResult insert_row(Statement *statement, Table *table) {
     if (table->num_rows >= ROWS_PER_PAGE * TABLE_MAX_PAGES) {
         return EXECUTE_TABLE_FULL;
     }
-    int page_num = table->num_rows / ROWS_PER_PAGE;
-    Row *page = get_page(table->pager, page_num);
+    Cursor *cursor = table_end(table);
+    Row *row = cursor_value(cursor);
+    *row = statement->row_to_insert;
 
-    int row_offset = table->num_rows % ROWS_PER_PAGE;
-    page[row_offset] = statement->row_to_insert;
     table->num_rows ++; 
+    free(cursor);
     return EXECUTE_SUCCESS;
 } 
 
@@ -391,13 +403,16 @@ ExecuteResult select_row(Table *table) {
     if (table->num_rows == 0) {
         return EXECUTE_TABLE_EMPTY;
     }
-    for (uint32_t i = 0; i < table->num_rows; i++) {
-        int page_num = i / ROWS_PER_PAGE;
-        int row_offset = i % ROWS_PER_PAGE;
+    Cursor *cursor = table_start(table);
+    while (!(cursor->end_of_table)) {
+        int page_num = cursor->row_num / ROWS_PER_PAGE;
+        int row_offset = cursor->row_num % ROWS_PER_PAGE;
         Row *page = get_page(table->pager, page_num);
         Row *row = &page[row_offset];
         printf("(%u, %s, %s)\n", row->id, row->username, row->email);
+        cursor_advance(cursor);
     }
+    free(cursor);
     return EXECUTE_SUCCESS;
 }
 
@@ -409,5 +424,38 @@ ExecuteResult execute_statement(Statement *statement, Table *table) {
             return select_row(table);
         default:
             return EXECUTE_FAILURE_UNKNOWN;
+    }
+}
+
+Cursor* table_start(Table *table) {
+    Cursor *cursor = malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->row_num = 0;
+    cursor->end_of_table = (table->num_rows == 0);
+
+    return cursor;
+}
+
+Cursor* table_end(Table *table) {
+    Cursor *cursor = malloc(sizeof(Cursor));
+    cursor->table = table;
+    cursor->row_num = table->num_rows;
+    cursor->end_of_table = true;
+
+    return cursor;
+}
+
+Row* cursor_value(Cursor* cursor) {
+    uint32_t row_num = cursor->row_num;
+    uint32_t page_num = row_num / ROWS_PER_PAGE;
+    Row *page = get_page(cursor->table->pager, page_num);
+    uint32_t row_offset = row_num % ROWS_PER_PAGE;
+    return &page[row_offset];
+}
+
+void cursor_advance(Cursor *cursor) {
+    cursor->row_num += 1;
+    if (cursor->row_num >= cursor->table->num_rows) {
+        cursor->end_of_table = true;
     }
 }
