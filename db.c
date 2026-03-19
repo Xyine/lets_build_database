@@ -150,6 +150,8 @@ void leaf_node_insert(Cursor *cursor, uint32_t key, Row *value);
 
 void print_constants();
 
+void print_leaf_node(void* node);
+
 int main(int argc, char* argv[]){
     if (argc < 2) {
         printf("Must supply a database filename.\n");
@@ -243,6 +245,10 @@ MetaCommandResult do_meta_command(char *input, Table *table){
     if (strcmp(input, ".exit") == 0){
         db_close(table);
         exit(EXIT_SUCCESS);
+    } else if (strcmp(input, ".btree") == 0) {
+        printf("Tree:\n");
+        print_leaf_node(get_page(table->pager, 0));
+        return META_COMMAND_SUCCESS;
     } else if (strcmp(input, ".constants") == 0) {
         printf("Constants:\n");
         print_constants();
@@ -562,4 +568,13 @@ void print_constants() {
     printf("LEAF_NODE_CELL_SIZE: %d\n", LEAF_NODE_CELL_SIZE);
     printf("LEAF_NODE_SPACE_FOR_CELLS: %d\n", LEAF_NODE_SPACE_FOR_CELLS);
     printf("LEAF_NODE_MAX_CELLS: %d\n", LEAF_NODE_MAX_CELLS);
+}
+
+void print_leaf_node(void* node) {
+    uint32_t num_cells = *leaf_node_num_cells(node);
+    printf("leaf (size %d)\n", num_cells);
+    for (uint32_t i = 0; i < num_cells; i++) {
+        uint32_t key = *leaf_node_key(node, i);
+        printf("  - %d : %d\n", i, key);
+    }
 }

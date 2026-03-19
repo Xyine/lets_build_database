@@ -28,7 +28,7 @@ def run_script(commands, db_name=TEST_DB):
 
     cleaned = []
     for line in lines:
-        line = line.replace("db >", "").strip()
+        line = line.replace("db >", "", 1).rstrip()
         if line:
             cleaned.append(line)
 
@@ -154,6 +154,7 @@ def test_email_too_long():
     assert "String is too long." in result
 
 def test_constants():
+    remove_test_db()
     script = """.constants
 .exit
 """
@@ -173,6 +174,32 @@ def test_constants():
     for line in expected:
         assert line in result
 
+def test_prints_one_node_btree():
+    remove_test_db()
+    script = [
+        "insert 3 user3 person3@example.com",
+        "insert 1 user1 person1@example.com",
+        "insert 2 user2 person2@example.com",
+        ".btree",
+        ".exit",
+    ]
+
+    result = run_script(script)
+
+    expected = [
+        "Executed.",
+        "Executed.",
+        "Executed.",
+        "Tree:",
+        "leaf (size 3)",
+        "  - 0 : 3",
+        "  - 1 : 1",
+        "  - 2 : 2",
+    ]
+
+    for line in expected:
+        assert line in result
+
 if __name__ == "__main__":
     test_insert_and_select()
     test_keeps_data_after_closing_connection()
@@ -183,4 +210,5 @@ if __name__ == "__main__":
     test_username_too_long()
     test_email_too_long()
     test_constants()
+    test_prints_one_node_btree()
     print("All tests passed")
