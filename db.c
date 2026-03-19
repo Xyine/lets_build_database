@@ -148,6 +148,8 @@ uint32_t* leaf_node_num_cells(void *node);
 
 void leaf_node_insert(Cursor *cursor, uint32_t key, Row *value);
 
+void print_constants();
+
 int main(int argc, char* argv[]){
     if (argc < 2) {
         printf("Must supply a database filename.\n");
@@ -241,7 +243,11 @@ MetaCommandResult do_meta_command(char *input, Table *table){
     if (strcmp(input, ".exit") == 0){
         db_close(table);
         exit(EXIT_SUCCESS);
-    }  
+    } else if (strcmp(input, ".constants") == 0) {
+        printf("Constants:\n");
+        print_constants();
+        return META_COMMAND_SUCCESS;
+    }
     return META_COMMAND_UNRECOGNIZED_COMMAND;
 }
 
@@ -549,3 +555,11 @@ void leaf_node_insert(Cursor *cursor, uint32_t key, Row *value) {
     memcpy(leaf_node_value(node, cursor->cell_num), value, ROW_SIZE);
 }
 
+void print_constants() {
+    printf("ROW_SIZE: %ld\n", ROW_SIZE);
+    printf("COMMON_NODE_HEADER_SIZE: %d\n", COMMON_NODE_HEADER_SIZE);
+    printf("LEAF_NODE_HEADER_SIZE: %d\n", LEAF_NODE_HEADER_SIZE);
+    printf("LEAF_NODE_CELL_SIZE: %d\n", LEAF_NODE_CELL_SIZE);
+    printf("LEAF_NODE_SPACE_FOR_CELLS: %d\n", LEAF_NODE_SPACE_FOR_CELLS);
+    printf("LEAF_NODE_MAX_CELLS: %d\n", LEAF_NODE_MAX_CELLS);
+}

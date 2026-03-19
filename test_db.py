@@ -78,13 +78,12 @@ def test_table_full():
 
     script = [
         f"insert {i} user{i} person{i}@example.com"
-        for i in range(1, 1302)
+        for i in range(1, 15)
     ]
     script.append(".exit")
 
     result = run_script(script)
-
-    assert result.count("Executed.") == 1300
+    assert result.count("Executed.") == 13
     assert result[-1] == "Error: Table full."
 
 
@@ -154,6 +153,25 @@ def test_email_too_long():
 
     assert "String is too long." in result
 
+def test_constants():
+    script = """.constants
+.exit
+"""
+
+    result = run_script(script)
+
+    expected = [
+        "Constants:",
+        "ROW_SIZE: 296",
+        "COMMON_NODE_HEADER_SIZE: 6",
+        "LEAF_NODE_HEADER_SIZE: 10",
+        "LEAF_NODE_CELL_SIZE: 300",
+        "LEAF_NODE_SPACE_FOR_CELLS: 4086",
+        "LEAF_NODE_MAX_CELLS: 13",
+    ]
+
+    for line in expected:
+        assert line in result
 
 if __name__ == "__main__":
     test_insert_and_select()
@@ -164,4 +182,5 @@ if __name__ == "__main__":
     test_negative_id()
     test_username_too_long()
     test_email_too_long()
+    test_constants()
     print("All tests passed")
