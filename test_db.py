@@ -192,9 +192,29 @@ def test_prints_one_node_btree():
         "Executed.",
         "Tree:",
         "leaf (size 3)",
-        "  - 0 : 3",
-        "  - 1 : 1",
-        "  - 2 : 2",
+        "  - 0 : 1",
+        "  - 1 : 2",
+        "  - 2 : 3",
+    ]
+
+    for line in expected:
+        assert line in result
+
+def test_duplicate_id():
+    script = [
+        "insert 1 user1 person1@example.com",
+        "insert 1 user1 person1@example.com",
+        "select",
+        ".exit",
+    ]
+
+    result = run_script(script)
+
+    expected = [
+        "Executed.",
+        "Error: Duplicate key.",
+        "(1, user1, person1@example.com)",
+        "Executed.",
     ]
 
     for line in expected:
@@ -211,4 +231,5 @@ if __name__ == "__main__":
     test_email_too_long()
     test_constants()
     test_prints_one_node_btree()
+    test_duplicate_id()
     print("All tests passed")
