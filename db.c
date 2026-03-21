@@ -105,7 +105,8 @@ const uint32_t LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_SIZE + LEAF_NODE_KEY_OFFSE
 const uint32_t LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
 const uint32_t LEAF_NODE_SPACE_FOR_CELLS = PAGE_SIZE - LEAF_NODE_HEADER_SIZE;
 const uint32_t LEAF_NODE_MAX_CELLS = LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE;
-
+const uint32_t LEAF_NODE_RIGHT_SPLIT_COUNT = (LEAF_NODE_MAX_CELLS + 1) /2;
+const uint32_t LEAF_NODE_LEFT_SPLIT_COUNT = (LEAF_NODE_MAX_CELLS + 1) - LEAF_NODE_RIGHT_SPLIT_COUNT;
 
 Table* db_open(const char *filename);
 
@@ -160,6 +161,10 @@ NodeType get_node_type(void *node);
 Cursor* leaf_node_find(Table *table, uint32_t page_num, uint32_t key);
 
 Cursor* table_find(Table *table, uint32_t key);
+
+uint32_t get_unused_page_num(Pager *pager);
+
+void leaf_node_split_and_insert(Cursor *cursor, uint32_t key, Row *value);
 
 int main(int argc, char* argv[]){
     if (argc < 2) {
@@ -455,9 +460,6 @@ void* get_page(Pager *pager, uint32_t page_num) {
 ExecuteResult insert_row(Statement *statement, Table *table) {
     void *node = get_page(table->pager, table->root_page_num);
     uint32_t num_cells = (*leaf_node_num_cells(node));
-    if (num_cells >= LEAF_NODE_MAX_CELLS) {
-        return EXECUTE_TABLE_FULL;
-    }
 
     Row *row_to_insert = &(statement->row_to_insert);
     uint32_t key_to_insert = row_to_insert->id;
@@ -554,8 +556,8 @@ void leaf_node_insert(Cursor *cursor, uint32_t key, Row *value) {
     uint32_t num_cells = *leaf_node_num_cells(node);
     if (num_cells >= LEAF_NODE_MAX_CELLS) {
         // Node full
-        printf("Need to implement splitting a leaf node.\n");
-        exit(EXIT_FAILURE);
+        leaf_node_split_and_insert(cursor, key, value);
+        return;
     }
 
     if (cursor->cell_num < num_cells) {
@@ -636,4 +638,45 @@ NodeType get_node_type(void *node) {
 void set_node_type(void *node, NodeType type) {
     uint8_t value = type;
     *((uint8_t*)((char*)node + NODE_TYPE_OFFSET)) = value;
+}
+
+void leaf_node_split_and_insert(Cursor *cursor, uint32_t key, Row *value) {
+    void *old_node = get_page(cursor->table->pager, cursor->page_num);
+    uint32_t new_page_num = get_unused_page_num(cursor->table->pager);
+    void *new_node = get_page(cursor->table->pager, new_page_num);
+    initialize_leaf_node(new_node);
+
+    for (uint32_t i = LEAF_NODE_MAX_CELLS; i >= 0; i--) {
+        void *destination_node;
+        if (i >= LEAF_NODE_LEFT_SPLIT_COUNT) {
+            destination_node = new_node;
+        } else {
+            destination_node = old_node;
+        }
+        uint32_t index_within_node = i % LEAF_NODE_LEFT_SPLIT_COUNT;
+        void *destination = leaf_node_cell(destination_node, index_within_node);
+
+        if (i == cursor->cell_num) {
+            *(uint32_t*)leaf_node_key(destination_node, index_within_node) = key;
+            memcpy(leaf_node_value(destination_node, index_within_node), value, ROW_SIZE);
+        } else if (i > cursor->cell_num) {
+            memcpy(destination, leaf_node_cell(old_node, i-1), LEAF_NODE_CELL_SIZE);
+        } else {
+            memcpy(destination, leaf_node_cell(old_node, i), LEAF_NODE_CELL_SIZE);
+        }
+    }
+
+    *(leaf_node_num_cells(old_node)) = LEAF_NODE_LEFT_SPLIT_COUNT;
+    *(leaf_node_num_cells(old_node)) = LEAF_NODE_RIGHT_SPLIT_COUNT;
+
+    if (is_node_root(old_node)) {
+        return create_new_root(cursor->table, new_page_num);
+    } else {
+        printf("Need to implement updating parent after split\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+uint32_t get_unused_page_num(Pager *pager) {
+    return pager->num_pages;
 }
