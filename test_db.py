@@ -191,10 +191,10 @@ def test_prints_one_node_btree():
         "Executed.",
         "Executed.",
         "Tree:",
-        "leaf (size 3)",
-        "  - 0 : 1",
-        "  - 1 : 2",
-        "  - 2 : 3",
+        "- leaf (size 3)",
+        "  - 1",
+        "  - 2",
+        "  - 3",
     ]
 
     for line in expected:
@@ -220,6 +220,45 @@ def test_duplicate_id():
     for line in expected:
         assert line in result
 
+def test_prints_three_leaf_btree():
+    script = [
+        f"insert {i} user{i} person{i}@example.com"
+        for i in range(1, 15)
+    ]
+    script.append(".btree")
+    script.append("insert 15 user15 person15@example.com")
+    script.append(".exit")
+
+    result = run_script(script)
+
+    result_subset = result[14:]
+
+    expected = [
+        "Tree:",
+        "- internal (size 1)",
+        "  - leaf (size 7)",
+        "    - 1",
+        "    - 2",
+        "    - 3",
+        "    - 4",
+        "    - 5",
+        "    - 6",
+        "    - 7",
+        "  - key 7",
+        "  - leaf (size 7)",
+        "    - 8",
+        "    - 9",
+        "    - 10",
+        "    - 11",
+        "    - 12",
+        "    - 13",
+        "    - 14",
+        "Need to implement searching an internal node",
+    ]
+
+    for line in expected:
+        assert line in result_subset
+
 if __name__ == "__main__":
     test_insert_and_select()
     test_keeps_data_after_closing_connection()
@@ -232,4 +271,5 @@ if __name__ == "__main__":
     test_constants()
     test_prints_one_node_btree()
     test_duplicate_id()
+    test_prints_three_leaf_btree()
     print("All tests passed")
