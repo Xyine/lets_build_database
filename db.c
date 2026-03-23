@@ -170,6 +170,8 @@ NodeType get_node_type(void *node);
 
 Cursor* leaf_node_find(Table *table, uint32_t page_num, uint32_t key);
 
+Cursor* internal_node_find(Table* table, uint32_t page_num, uint32_t key);
+
 Cursor* table_find(Table *table, uint32_t key);
 
 uint32_t get_unused_page_num(Pager *pager);
@@ -666,8 +668,7 @@ Cursor* table_find(Table *table, uint32_t key) {
     if (get_node_type(root_node) == NODE_LEAF) {
         return leaf_node_find(table, root_page_num, key);
     } else {
-        printf("Need to implement searching  an internal node\n");
-        exit(EXIT_FAILURE);
+        return internal_node_find(table, root_page_num, key);
     }
 }
 
@@ -697,6 +698,36 @@ Cursor* leaf_node_find(Table *table, uint32_t page_num, uint32_t key) {
 
     cursor->cell_num = min_index;
     return cursor;
+}
+
+Cursor* internal_node_find(Table* table, uint32_t page_num, uint32_t key) {
+    void* node = get_page(table->pager, page_num);
+    uint32_t num_keys = *internal_node_num_keys(node);
+
+    uint32_t min_index = 0;
+    uint32_t max_index = num_keys;
+
+    while (min_index != max_index) {
+        uint32_t index = (min_index + max_index) / 2;
+        uint32_t key_to_right = *internal_node_key(node, index);
+        if (key_to_right >= key) {
+        max_index = index;
+        } else {
+        min_index = index + 1;
+        }
+    }
+
+    uint32_t child_num = *internal_node_child(node, min_index);
+    void* child = get_page(table->pager, child_num);
+    switch (get_node_type(child)) {
+        case NODE_LEAF:
+            return leaf_node_find(table, child_num, key);
+        case NODE_INTERNAL:
+            return internal_node_find(table, child_num, key);
+    }
+    
+    printf("Unknown node type.\n");
+    exit(EXIT_FAILURE);
 }
 
 NodeType get_node_type(void *node) {
@@ -736,7 +767,7 @@ void leaf_node_split_and_insert(Cursor *cursor, uint32_t key, Row *value) {
     }
 
     *(leaf_node_num_cells(old_node)) = LEAF_NODE_LEFT_SPLIT_COUNT;
-    *(leaf_node_num_cells(old_node)) = LEAF_NODE_RIGHT_SPLIT_COUNT;
+    *(leaf_node_num_cells(new_node)) = LEAF_NODE_RIGHT_SPLIT_COUNT;
 
     if (is_node_root(old_node)) {
         create_new_root(cursor->table, new_page_num);

@@ -78,13 +78,12 @@ def test_table_full():
 
     script = [
         f"insert {i} user{i} person{i}@example.com"
-        for i in range(1, 15)
+        for i in range(1, 1402)
     ]
     script.append(".exit")
 
     result = run_script(script)
-    assert result.count("Executed.") == 13
-    assert result[-1] == "Error: Table full."
+    assert "Need to implement updating parent after split" in result
 
 
 def test_max_length_strings():
@@ -201,6 +200,7 @@ def test_prints_one_node_btree():
         assert line in result
 
 def test_duplicate_id():
+    remove_test_db()
     script = [
         "insert 1 user1 person1@example.com",
         "insert 1 user1 person1@example.com",
@@ -221,6 +221,7 @@ def test_duplicate_id():
         assert line in result
 
 def test_prints_three_leaf_btree():
+    remove_test_db()
     script = [
         f"insert {i} user{i} person{i}@example.com"
         for i in range(1, 15)
@@ -253,7 +254,7 @@ def test_prints_three_leaf_btree():
         "    - 12",
         "    - 13",
         "    - 14",
-        "Need to implement searching an internal node",
+        "Executed.",
     ]
 
     for line in expected:
