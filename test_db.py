@@ -164,9 +164,9 @@ def test_constants():
         "Constants:",
         "ROW_SIZE: 296",
         "COMMON_NODE_HEADER_SIZE: 6",
-        "LEAF_NODE_HEADER_SIZE: 10",
+        "LEAF_NODE_HEADER_SIZE: 14",
         "LEAF_NODE_CELL_SIZE: 300",
-        "LEAF_NODE_SPACE_FOR_CELLS: 4086",
+        "LEAF_NODE_SPACE_FOR_CELLS: 4082",
         "LEAF_NODE_MAX_CELLS: 13",
     ]
 
@@ -260,6 +260,42 @@ def test_prints_three_leaf_btree():
     for line in expected:
         assert line in result_subset
 
+def test_select_multi_level_tree():
+    remove_test_db()
+
+    script = [
+        f"insert {i} user{i} person{i}@example.com"
+        for i in range(1, 16)
+    ]
+    script.append("select")
+    script.append(".exit")
+
+    result = run_script(script)
+
+    result_subset = result[15:]
+
+    expected = [
+        "(1, user1, person1@example.com)",
+        "(2, user2, person2@example.com)",
+        "(3, user3, person3@example.com)",
+        "(4, user4, person4@example.com)",
+        "(5, user5, person5@example.com)",
+        "(6, user6, person6@example.com)",
+        "(7, user7, person7@example.com)",
+        "(8, user8, person8@example.com)",
+        "(9, user9, person9@example.com)",
+        "(10, user10, person10@example.com)",
+        "(11, user11, person11@example.com)",
+        "(12, user12, person12@example.com)",
+        "(13, user13, person13@example.com)",
+        "(14, user14, person14@example.com)",
+        "(15, user15, person15@example.com)",
+        "Executed.",
+    ]
+
+    for line in expected:
+        assert line in result_subset
+
 if __name__ == "__main__":
     test_insert_and_select()
     test_keeps_data_after_closing_connection()
@@ -273,4 +309,5 @@ if __name__ == "__main__":
     test_prints_one_node_btree()
     test_duplicate_id()
     test_prints_three_leaf_btree()
+    test_select_multi_level_tree()
     print("All tests passed")

@@ -96,7 +96,9 @@ const uint8_t COMMON_NODE_HEADER_SIZE = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_P
 
 const uint32_t LEAF_NODE_NUM_CELLS_SIZE = sizeof(uint32_t);
 const uint32_t LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE;
-const uint32_t LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE;
+const uint32_t LEAF_NODE_NEXT_LEAF_SIZE = sizeof(uint32_t);
+const uint32_t LEAF_NODE_NEXT_LEAF_OFFSET = LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NUM_CELLS_OFFSET;
+const uint32_t LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE;
 
 const uint32_t LEAF_NODE_KEY_SIZE = sizeof(uint32_t);
 const uint32_t LEAF_NODE_KEY_OFFSET = 0;
@@ -201,6 +203,8 @@ void print_tree(Pager *pager, uint32_t page_num, uint32_t indentation_level);
 void indent(uint32_t level);
 
 void initialize_internal_node(void *node);
+
+uint32_t* leaf_node_next_leaf(void* node);
 
 int main(int argc, char* argv[]){
     if (argc < 2) {
@@ -538,10 +542,7 @@ ExecuteResult execute_statement(Statement *statement, Table *table) {
 }
 
 Cursor* table_start(Table *table) {
-    Cursor *cursor = malloc(sizeof(Cursor));
-    cursor->table = table;
-    cursor->page_num = table->root_page_num;
-    cursor->cell_num = 0;
+    Cursor *cursor = table_find(table, 0);
 
     void *root_node = get_page(table->pager, table->root_page_num);
     uint32_t num_cells = *leaf_node_num_cells(root_node);
@@ -562,7 +563,13 @@ void cursor_advance(Cursor *cursor) {
 
     cursor->cell_num += 1;
     if (cursor->cell_num >= (*leaf_node_num_cells(node))) {
-        cursor->end_of_table = true;
+        uint32_t next_page_num = *leaf_node_next_leaf(node);
+        if (next_page_num == 0) {
+            cursor->end_of_table = true;
+        } else {
+            cursor->page_num = next_page_num;
+            cursor->cell_num = 0;
+        }
     }
 }
 
@@ -586,6 +593,7 @@ void initialize_leaf_node(void *node) {
     set_node_type(node, NODE_LEAF);
     set_node_root(node, false);
     *leaf_node_num_cells(node) = 0;
+    *leaf_node_next_leaf(node) = 0;  // 0 represents no sibling
 }
 
 void initialize_internal_node(void *node) {
@@ -745,6 +753,8 @@ void leaf_node_split_and_insert(Cursor *cursor, uint32_t key, Row *value) {
     uint32_t new_page_num = get_unused_page_num(cursor->table->pager);
     void *new_node = get_page(cursor->table->pager, new_page_num);
     initialize_leaf_node(new_node);
+    *leaf_node_next_leaf(new_node) = *leaf_node_next_leaf(old_node);
+    *leaf_node_next_leaf(old_node) = new_page_num;
 
     for (int32_t i = LEAF_NODE_MAX_CELLS; i >= 0; i--) {
         void *destination_node;
@@ -757,7 +767,7 @@ void leaf_node_split_and_insert(Cursor *cursor, uint32_t key, Row *value) {
         void *destination = leaf_node_cell(destination_node, index_within_node);
 
         if (i == (int32_t)cursor->cell_num) {
-            *(uint32_t*)leaf_node_key(destination_node, index_within_node) = key;
+            *leaf_node_key(destination_node, index_within_node) = key;
             memcpy(leaf_node_value(destination_node, index_within_node), value, ROW_SIZE);
         } else if (i > (int32_t)cursor->cell_num) {
             memcpy(destination, leaf_node_cell(old_node, i-1), LEAF_NODE_CELL_SIZE);
@@ -850,3 +860,6 @@ void set_node_root(void *node, bool is_root) {
     *((uint8_t*)((char*)node + IS_ROOT_OFFSET)) = value;
 }
 
+uint32_t* leaf_node_next_leaf(void* node) {
+   return (uint32_t*)((char*)node + LEAF_NODE_NEXT_LEAF_OFFSET); 
+}
