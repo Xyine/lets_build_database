@@ -83,7 +83,7 @@ def test_table_full():
     script.append(".exit")
 
     result = run_script(script)
-    assert "Need to implement updating parent after split" in result
+    assert "Need to implement splitting internal node" in result
 
 
 def test_max_length_strings():
@@ -296,6 +296,91 @@ def test_select_multi_level_tree():
     for line in expected:
         assert line in result_subset
 
+def test_prints_four_leaf_btree():
+    remove_test_db()
+
+    script = [
+        "insert 18 user18 person18@example.com",
+        "insert 7 user7 person7@example.com",
+        "insert 10 user10 person10@example.com",
+        "insert 29 user29 person29@example.com",
+        "insert 23 user23 person23@example.com",
+        "insert 4 user4 person4@example.com",
+        "insert 14 user14 person14@example.com",
+        "insert 30 user30 person30@example.com",
+        "insert 15 user15 person15@example.com",
+        "insert 26 user26 person26@example.com",
+        "insert 22 user22 person22@example.com",
+        "insert 19 user19 person19@example.com",
+        "insert 2 user2 person2@example.com",
+        "insert 1 user1 person1@example.com",
+        "insert 21 user21 person21@example.com",
+        "insert 11 user11 person11@example.com",
+        "insert 6 user6 person6@example.com",
+        "insert 20 user20 person20@example.com",
+        "insert 5 user5 person5@example.com",
+        "insert 8 user8 person8@example.com",
+        "insert 9 user9 person9@example.com",
+        "insert 3 user3 person3@example.com",
+        "insert 12 user12 person12@example.com",
+        "insert 27 user27 person27@example.com",
+        "insert 17 user17 person17@example.com",
+        "insert 16 user16 person16@example.com",
+        "insert 13 user13 person13@example.com",
+        "insert 24 user24 person24@example.com",
+        "insert 25 user25 person25@example.com",
+        "insert 28 user28 person28@example.com",
+        ".btree",
+        ".exit",
+    ]
+
+    result = run_script(script)
+
+    expected = [
+            "Tree:",
+            "- internal (size 3)",
+            "  - leaf (size 7)",
+            "    - 1",
+            "    - 2",
+            "    - 3",
+            "    - 4",
+            "    - 5",
+            "    - 6",
+            "    - 7",
+            "  - key 7",
+            "  - leaf (size 8)",
+            "    - 8",
+            "    - 9",
+            "    - 10",
+            "    - 11",
+            "    - 12",
+            "    - 13",
+            "    - 14",
+            "    - 15",
+            "  - key 15",
+            "  - leaf (size 7)",
+            "    - 16",
+            "    - 17",
+            "    - 18",
+            "    - 19",
+            "    - 20",
+            "    - 21",
+            "    - 22",
+            "  - key 22",
+            "  - leaf (size 8)",
+            "    - 23",
+            "    - 24",
+            "    - 25",
+            "    - 26",
+            "    - 27",
+            "    - 28",
+            "    - 29",
+            "    - 30",
+        ]
+
+    for line in expected:
+        assert line in result
+
 if __name__ == "__main__":
     test_insert_and_select()
     test_keeps_data_after_closing_connection()
@@ -310,4 +395,5 @@ if __name__ == "__main__":
     test_duplicate_id()
     test_prints_three_leaf_btree()
     test_select_multi_level_tree()
+    test_prints_four_leaf_btree()
     print("All tests passed")
