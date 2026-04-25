@@ -177,8 +177,6 @@ python3 test_db.py
 
 ## Next Steps
 
-- Improve internal node splitting
-
 - Implement search optimization
 
 - Add DELETE / UPDATE
