@@ -38,7 +38,8 @@ typedef enum PrepareResult {
 
 typedef enum StatementType {
     STATEMENT_INSERT,
-    STATEMENT_SELECT
+    STATEMENT_SELECT,
+    STATEMENT_SELECT_BY_ID
 } StatementType;
 
 typedef enum ExecuteResult {
@@ -46,7 +47,8 @@ typedef enum ExecuteResult {
     EXECUTE_TABLE_FULL,
     EXECUTE_TABLE_EMPTY,
     EXECUTE_FAILURE_UNKNOWN,
-    EXECUTE_DUPLICATE_KEY
+    EXECUTE_DUPLICATE_KEY,
+    EXECUTE_NOT_FOUND
 } ExecuteResult;
 
 typedef enum NodeType {
@@ -66,6 +68,7 @@ typedef struct Row {
 typedef struct Statement {
     StatementType type;
     Row row_to_insert;
+    uint32_t id;
 } Statement;
 
 typedef struct Pager {
@@ -285,6 +288,9 @@ int main(int argc, char* argv[]){
             case EXECUTE_FAILURE_UNKNOWN:
                 printf("Error: unknown statement type.\n");
                 break;
+            case EXECUTE_NOT_FOUND:
+                printf("Error: Id not found in the table.\n");
+                break;
         }
     }
 
@@ -361,6 +367,12 @@ PrepareResult prepare_insert(char *input, Statement *statement) {
 }
 
 PrepareResult prepare_statement(char *input, Statement *statement) {
+    uint32_t id;
+    if (sscanf(input, "select where id = %u", &id) == 1) {
+        statement->type = STATEMENT_SELECT_BY_ID;
+        statement->row_to_insert.id = id;
+        return PREPARE_SUCCESS;
+    }
     if (strcmp(input, "select") == 0) {
         statement->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
@@ -513,16 +525,17 @@ void* get_page(Pager *pager, uint32_t page_num) {
 }
 
 ExecuteResult insert_row(Statement *statement, Table *table) {
-    void *node = get_page(table->pager, table->root_page_num);
-    uint32_t num_cells = (*leaf_node_num_cells(node));
-
     Row *row_to_insert = &(statement->row_to_insert);
     uint32_t key_to_insert = row_to_insert->id;
+
     Cursor *cursor = table_find(table, key_to_insert);
+    void *node = get_page(table->pager, cursor->page_num);
+    uint32_t num_cells = *leaf_node_num_cells(node);
 
     if (cursor->cell_num < num_cells) {
         uint32_t key_at_index = *leaf_node_key(node, cursor->cell_num);
         if (key_at_index == key_to_insert) {
+            free(cursor);
             return EXECUTE_DUPLICATE_KEY;
         }
     }
@@ -544,12 +557,36 @@ ExecuteResult select_row(Table *table) {
     return EXECUTE_SUCCESS;
 }
 
+ExecuteResult select_row_by_id(Table *table, uint32_t id) {
+    Cursor *cursor = table_find(table, id);
+    void *node = get_page(table->pager, cursor->page_num);
+
+    if (cursor->cell_num >= *leaf_node_num_cells(node)) {
+        free(cursor);
+        return EXECUTE_NOT_FOUND;
+    }
+
+    uint32_t key_at_index = *leaf_node_key(node, cursor->cell_num);
+    if (key_at_index != id) {
+        free(cursor);
+        return EXECUTE_NOT_FOUND;
+    }
+
+    Row *row = cursor_value(cursor);
+    printf("(%u, %s, %s)\n", row->id, row->username, row->email);
+
+    free(cursor);
+    return EXECUTE_SUCCESS;
+}
+
 ExecuteResult execute_statement(Statement *statement, Table *table) {
     switch(statement->type) {
         case STATEMENT_INSERT:
             return insert_row(statement, table);
         case STATEMENT_SELECT:
             return select_row(table);
+        case STATEMENT_SELECT_BY_ID:
+            return select_row_by_id(table, statement->row_to_insert.id);
         default:
             return EXECUTE_FAILURE_UNKNOWN;
     }
@@ -558,8 +595,8 @@ ExecuteResult execute_statement(Statement *statement, Table *table) {
 Cursor* table_start(Table *table) {
     Cursor *cursor = table_find(table, 0);
 
-    void *root_node = get_page(table->pager, table->root_page_num);
-    uint32_t num_cells = *leaf_node_num_cells(root_node);
+    void *node = get_page(table->pager, cursor->page_num);
+    uint32_t num_cells = *leaf_node_num_cells(node);
     cursor->end_of_table = (num_cells == 0);
 
     return cursor;
